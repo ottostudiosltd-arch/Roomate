@@ -19,6 +19,8 @@ interface RoommateState {
   reportPost: (id: string) => Promise<void>;
   deletePost: (id: string) => Promise<void>;
   markAsFilled: (id: string) => Promise<void>;
+  submitAppeal: (id: string, explanation: string) => Promise<void>;
+  verifyPost: (id: string) => Promise<void>;
   banContact: (contact: string) => Promise<void>;
   checkIsBanned: (contact: string) => Promise<boolean>;
 }
@@ -43,12 +45,12 @@ export const useRoommateStore = create<RoommateState>((set) => ({
         return;
       }
 
-      // Auto Post Expiry: Expire listings older than 30 days (except admin updates)
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      // Auto-expire / auto-delete reported posts older than 5 days (retention rule)
+      const now = Date.now();
+      const mappedPosts: RoommatePost[] = [];
 
-      const mappedPosts: RoommatePost[] = (data || [])
-        .map((dbPost: any) => ({
+      for (const dbPost of (data || [])) {
+        const post: RoommatePost = {
           id: dbPost.id,
           createdAt: dbPost.created_at,
           name: dbPost.name,
@@ -60,11 +62,26 @@ export const useRoommateStore = create<RoommateState>((set) => ({
           googleMapsUrl: dbPost.google_maps_url,
           isUpdate: dbPost.is_update,
           title: dbPost.title,
-        }))
-        .filter((post: RoommatePost) => {
-          if (post.isUpdate) return true; // Keep platform announcements
-          return new Date(post.createdAt).getTime() >= thirtyDaysAgo.getTime();
-        });
+        };
+
+        const isUnderReview = post.tags?.includes('Status:Under Review') || post.reportsCount > 0;
+        const isAppeal = post.tags?.includes('Status:Appeal Submitted');
+        const reportedAtTag = post.tags?.find(t => t.startsWith('ReportedAt:'));
+
+        if ((isUnderReview || isAppeal) && reportedAtTag) {
+          const reportedTime = parseInt(reportedAtTag.replace('ReportedAt:', ''));
+          if (!isNaN(reportedTime) && now - reportedTime > 5 * 24 * 60 * 60 * 1000) {
+            // Auto-delete from DB in background, skip loading it
+            supabase.from('posts').delete().eq('id', post.id).then((res: any) => {
+              const delErr = res.error;
+              if (delErr) console.error('Failed to auto-delete expired reported post:', delErr);
+            });
+            continue;
+          }
+        }
+
+        mappedPosts.push(post);
+      }
 
       set({ posts: mappedPosts, dbError: null });
     } catch (err: any) {
@@ -88,7 +105,6 @@ export const useRoommateStore = create<RoommateState>((set) => ({
             throw new Error('This phone number has been banned for violating community guidelines.');
           }
         } catch (banCheckErr: any) {
-          // Gracefully fallback if banned_contacts table doesn't exist
           console.warn('banned_contacts check skipped or table missing:', banCheckErr?.message);
           if (banCheckErr?.message?.includes('banned')) {
             throw banCheckErr;
@@ -147,10 +163,10 @@ export const useRoommateStore = create<RoommateState>((set) => ({
 
   reportPost: async (id) => {
     try {
-      // Find the post first to see its current reports count
+      // Find the post first to see its current reports count and tags
       const { data: post, error: fetchErr } = await supabase
         .from('posts')
-        .select('reports_count')
+        .select('reports_count, tags')
         .eq('id', id)
         .single();
 
@@ -160,40 +176,34 @@ export const useRoommateStore = create<RoommateState>((set) => ({
       }
 
       const newReports = post.reports_count + 1;
+      const currentTags = post.tags ? [...post.tags] : [];
 
-      if (newReports >= 5) {
-        // Auto-delete if reported 5 or more times
-        const { error: delErr } = await supabase
-          .from('posts')
-          .delete()
-          .eq('id', id);
+      // Filter out other status tags
+      const updatedTags = currentTags.filter((t: string) => !t.startsWith('Status:'));
+      updatedTags.push('Status:Under Review');
 
-        if (delErr) {
-          console.error('Error auto-deleting reported post:', delErr);
-          return;
-        }
-
-        set((state) => ({
-          posts: state.posts.filter((p) => p.id !== id),
-        }));
-      } else {
-        // Increment reports count in DB
-        const { error: updateErr } = await supabase
-          .from('posts')
-          .update({ reports_count: newReports })
-          .eq('id', id);
-
-        if (updateErr) {
-          console.error('Error updating reports count in Supabase:', updateErr);
-          return;
-        }
-
-        set((state) => ({
-          posts: state.posts.map((p) => 
-            p.id === id ? { ...p, reportsCount: newReports } : p
-          ),
-        }));
+      // Add ReportedAt timestamp tag if not already present
+      const hasReportedAt = currentTags.some(t => t.startsWith('ReportedAt:'));
+      if (!hasReportedAt) {
+        updatedTags.push(`ReportedAt:${Date.now()}`);
       }
+
+      // Update in Supabase
+      const { error: updateErr } = await supabase
+        .from('posts')
+        .update({ reports_count: newReports, tags: updatedTags })
+        .eq('id', id);
+
+      if (updateErr) {
+        console.error('Error updating reports count in Supabase:', updateErr);
+        return;
+      }
+
+      set((state) => ({
+        posts: state.posts.map((p) => 
+          p.id === id ? { ...p, reportsCount: newReports, tags: updatedTags } : p
+        ),
+      }));
     } catch (err) {
       console.error('Failed to report post:', err);
     }
@@ -221,7 +231,6 @@ export const useRoommateStore = create<RoommateState>((set) => ({
 
   markAsFilled: async (id) => {
     try {
-      // Get the existing post
       const { data: post, error: fetchErr } = await supabase
         .from('posts')
         .select('tags')
@@ -233,10 +242,10 @@ export const useRoommateStore = create<RoommateState>((set) => ({
         return;
       }
 
-      const updatedTags = post.tags ? [...post.tags] : [];
-      if (!updatedTags.includes('Filled')) {
-        updatedTags.push('Filled');
-      }
+      // Remove other statuses
+      const currentTags = post.tags ? [...post.tags] : [];
+      const updatedTags = currentTags.filter((t: string) => !t.startsWith('Status:') && t !== 'Filled');
+      updatedTags.push('Status:Roommate Found');
 
       const { error } = await supabase
         .from('posts')
@@ -258,12 +267,91 @@ export const useRoommateStore = create<RoommateState>((set) => ({
     }
   },
 
+  submitAppeal: async (id, explanation) => {
+    try {
+      const { data: post, error: fetchErr } = await supabase
+        .from('posts')
+        .select('tags')
+        .eq('id', id)
+        .single();
+
+      if (fetchErr || !post) {
+        console.error('Error fetching tags to submit appeal:', fetchErr);
+        return;
+      }
+
+      // Filter out existing status and appeal text tags
+      const currentTags = post.tags ? [...post.tags] : [];
+      const updatedTags = currentTags.filter((t: string) => !t.startsWith('Status:') && !t.startsWith('AppealText:'));
+      
+      updatedTags.push('Status:Appeal Submitted');
+      updatedTags.push(`AppealText:${explanation}`);
+
+      const { error } = await supabase
+        .from('posts')
+        .update({ tags: updatedTags })
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error submitting appeal to Supabase:', error);
+        return;
+      }
+
+      set((state) => ({
+        posts: state.posts.map((p) => 
+          p.id === id ? { ...p, tags: updatedTags } : p
+        ),
+      }));
+    } catch (err) {
+      console.error('Failed to submit appeal:', err);
+    }
+  },
+
+  verifyPost: async (id) => {
+    try {
+      const { data: post, error: fetchErr } = await supabase
+        .from('posts')
+        .select('tags')
+        .eq('id', id)
+        .single();
+
+      if (fetchErr || !post) {
+        console.error('Error fetching tags to verify post:', fetchErr);
+        return;
+      }
+
+      // Restore active, clear scam tag and clear appeal text
+      const currentTags = post.tags ? [...post.tags] : [];
+      const updatedTags = currentTags.filter(
+        (t: string) => !t.startsWith('Status:') && !t.startsWith('AppealText:') && !t.startsWith('ReportedAt:') && t !== 'Filled'
+      );
+      updatedTags.push('Status:Verified');
+
+      const { error } = await supabase
+        .from('posts')
+        .update({ reports_count: 0, tags: updatedTags })
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error verifying post in Supabase:', error);
+        return;
+      }
+
+      set((state) => ({
+        posts: state.posts.map((p) => 
+          p.id === id ? { ...p, reportsCount: 0, tags: updatedTags } : p
+        ),
+      }));
+    } catch (err) {
+      console.error('Failed to verify post:', err);
+    }
+  },
+
   banContact: async (contact) => {
     try {
       const cleanedContact = contact.replace(/\D/g, '');
       if (!cleanedContact) return;
 
-      // 1. Insert into banned_contacts table
       try {
         await supabase
           .from('banned_contacts')
@@ -272,7 +360,6 @@ export const useRoommateStore = create<RoommateState>((set) => ({
         console.error('Failed to insert into banned_contacts table:', banErr);
       }
 
-      // 2. Delete all posts with this phone number from Supabase
       const { error: delErr } = await supabase
         .from('posts')
         .delete()
@@ -282,7 +369,6 @@ export const useRoommateStore = create<RoommateState>((set) => ({
         console.error('Failed to delete banned contact posts from Supabase:', delErr);
       }
 
-      // 3. Remove banned listings from local store
       set((state) => ({
         posts: state.posts.filter((p) => p.contact.replace(/\D/g, '') !== cleanedContact),
       }));

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { RoommatePost } from '../types';
+import { RoommatePost, getPostStatus, getPostAppealText } from '../types';
 import { useRoommateStore } from '../store/roommateStore';
-import { MoreVertical, Phone, MessageSquare, AlertTriangle, ShieldCheck, Check, MapPin, Trash2, CheckCircle2 } from 'lucide-react';
+import { MoreVertical, Phone, MessageSquare, AlertTriangle, ShieldCheck, Check, MapPin, Trash2, CheckCircle2, ShieldAlert } from 'lucide-react';
 
 interface RoommateCardProps {
   post?: RoommatePost;
@@ -10,13 +10,18 @@ interface RoommateCardProps {
 }
 
 export const RoommateCard: React.FC<RoommateCardProps> = ({ post, isLoading = false, isAdmin = false }) => {
-  const { reportPost, deletePost, markAsFilled } = useRoommateStore();
+  const { reportPost, deletePost, markAsFilled, submitAppeal } = useRoommateStore();
   
   // States
   const [showDropdown, setShowDropdown] = useState(false);
   const [reported, setReported] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isMyPost, setIsMyPost] = useState(false);
+
+  // Appeal States
+  const [showAppealForm, setShowAppealForm] = useState(false);
+  const [appealExplanation, setAppealExplanation] = useState('');
+  const [appealSubmitting, setAppealSubmitting] = useState(false);
 
   // Check if this post was created on this local browser device
   useEffect(() => {
@@ -57,12 +62,29 @@ export const RoommateCard: React.FC<RoommateCardProps> = ({ post, isLoading = fa
     setShowDropdown(false);
   };
 
-  // WhatsApp chat redirect
+  const handleSubmitAppeal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!post || !appealExplanation.trim()) return;
+
+    setAppealSubmitting(true);
+    try {
+      await submitAppeal(post.id, appealExplanation.trim());
+      setShowAppealForm(false);
+      alert('Appeal submitted successfully. System Admins will review your listing shortly.');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAppealSubmitting(false);
+    }
+  };
+
+  // WhatsApp chat redirect (clean URL encoding, no %2520 double-encoding)
   const handleWhatsApp = () => {
     if (!post) return;
     const cleaned = post.contact.replace(/\D/g, '');
     const waNumber = cleaned.startsWith('91') ? cleaned : `91${cleaned}`;
-    const waUrl = `https://wa.me/${waNumber}?text=Hey%20${encodeURIComponent(post.name)},%20I%20saw%20your%2520listing%20on%20Roomate%20and%20wanted%20to%252520connect!`;
+    const message = `Hey ${post.name}, I saw your listing on Roomate and wanted to connect!`;
+    const waUrl = `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`;
     window.open(waUrl, '_blank');
   };
 
@@ -96,7 +118,11 @@ export const RoommateCard: React.FC<RoommateCardProps> = ({ post, isLoading = fa
     );
   }
 
-  const isFilled = post.tags?.includes('Filled') || false;
+  // Extract status tags
+  const status = getPostStatus(post);
+  const isFilled = status === 'Roommate Found';
+  const isUnderReview = status === 'Under Review';
+  const isAppeal = status === 'Appeal Submitted';
 
   // Check if it is a platform update announcement
   if (post.isUpdate) {
@@ -188,7 +214,7 @@ export const RoommateCard: React.FC<RoommateCardProps> = ({ post, isLoading = fa
     );
   }
 
-  // Exact location link resolution (Checks if poster saved coordinates, else queries area)
+  // Exact location link resolution
   const exactMapsUrl = post.googleMapsUrl && post.googleMapsUrl.trim() !== ''
     ? post.googleMapsUrl
     : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(post.area + ', Pune')}`;
@@ -196,7 +222,7 @@ export const RoommateCard: React.FC<RoommateCardProps> = ({ post, isLoading = fa
   return (
     <div className={`premium-card p-5 relative flex flex-col justify-between gap-4 bg-white text-slate-800 animate-fade-in-up min-h-[170px] overflow-hidden ${
       isFilled ? 'border-dashed border-slate-350 opacity-80 bg-slate-50/40' : ''
-    }`}>
+    } ${isUnderReview || isAppeal ? 'border-red-200 bg-red-50/10' : ''}`}>
       
       {/* Delete Confirmation Overlay */}
       {showDeleteConfirm && (
@@ -232,9 +258,31 @@ export const RoommateCard: React.FC<RoommateCardProps> = ({ post, isLoading = fa
             <span title="Verified student profile">
               <ShieldCheck size={14} className="text-blue-600 fill-blue-500/10 shrink-0" />
             </span>
+            
+            {/* Status Badges */}
+            {status === 'Verified' && (
+              <span className="bg-emerald-50 text-emerald-700 border border-emerald-250 text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md flex items-center leading-none">
+                Verified
+              </span>
+            )}
             {isFilled && (
               <span className="bg-slate-100 text-slate-500 border border-slate-250 text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md flex items-center gap-0.5 leading-none">
                 <Check size={9} strokeWidth={3} /> Filled
+              </span>
+            )}
+            {isUnderReview && (
+              <span className="bg-red-50 text-red-700 border border-red-200 text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md flex items-center leading-none animate-pulse">
+                Under Review
+              </span>
+            )}
+            {isAppeal && (
+              <span className="bg-amber-50 text-amber-700 border border-amber-250 text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md flex items-center leading-none">
+                Appeal Pending
+              </span>
+            )}
+            {status === 'Expired' && (
+              <span className="bg-slate-50 text-slate-400 border border-slate-200 text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md flex items-center leading-none">
+                Expired
               </span>
             )}
           </div>
@@ -274,11 +322,11 @@ export const RoommateCard: React.FC<RoommateCardProps> = ({ post, isLoading = fa
                   className="w-full text-left px-3 py-2 text-xs font-bold text-slate-600 hover:bg-red-50 hover:text-red-650 flex items-center space-x-1.5 cursor-pointer"
                 >
                   <AlertTriangle size={13} className="text-slate-400" />
-                  <span>Report Scam ({post.reportsCount}/5)</span>
+                  <span>Report scam ({post.reportsCount}/5)</span>
                 </button>
 
                 {/* Mark as Filled option for owner */}
-                {isMyPost && !isFilled && (
+                {isMyPost && !isFilled && status !== 'Expired' && (
                   <button
                     onClick={handleMarkAsFilled}
                     className="w-full text-left px-3 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-50 flex items-center space-x-1.5 cursor-pointer border-t border-slate-100 mt-1 pt-1.5"
@@ -304,6 +352,60 @@ export const RoommateCard: React.FC<RoommateCardProps> = ({ post, isLoading = fa
         </div>
       </div>
 
+      {/* Flagged Status Banner */}
+      {(isUnderReview || isAppeal) && (
+        <div className="p-3 bg-red-50/50 border border-red-200 rounded-xl text-[10px] text-red-800 leading-normal flex items-start space-x-2 font-semibold">
+          <ShieldAlert size={14} className="shrink-0 mt-0.5 text-red-600" />
+          <div className="space-y-1">
+            <p>
+              {isUnderReview 
+                ? '⚠️ Scam Alert: This listing has been flagged by users and is currently under review.' 
+                : '⏳ Appeal Submitted: Your listing is currently under admin review. Decision pending.'}
+            </p>
+            {isMyPost && isUnderReview && !showAppealForm && (
+              <button 
+                onClick={() => setShowAppealForm(true)}
+                className="mt-1 bg-red-600 hover:bg-red-700 text-white text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md transition-colors cursor-pointer"
+              >
+                Verify Myself
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Appeal Form Inline */}
+      {showAppealForm && (
+        <form onSubmit={handleSubmitAppeal} className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5 animate-fade-in-up text-slate-800">
+          <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider block">Verify Listing Appeal</span>
+          <textarea
+            placeholder="Explain why this listing is genuine. You can provide links, room details, or evidence for admins."
+            rows={3}
+            value={appealExplanation}
+            onChange={(e) => setAppealExplanation(e.target.value)}
+            className="w-full p-2 border border-slate-200 rounded-lg text-xs bg-white text-black focus:outline-none focus:border-slate-400 font-semibold"
+            required
+          />
+          <div className="flex space-x-2 justify-end">
+            <button 
+              type="button" 
+              onClick={() => setShowAppealForm(false)} 
+              className="px-2.5 py-1 border border-slate-250 hover:bg-slate-100 rounded-full text-[9px] font-black uppercase tracking-wider cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button 
+              type="submit" 
+              disabled={appealSubmitting}
+              className="px-3.5 py-1 bg-black text-white hover:bg-slate-900 rounded-full text-[9px] font-black uppercase tracking-wider cursor-pointer flex items-center space-x-1"
+            >
+              {appealSubmitting && <CheckCircle2 size={10} className="animate-spin" />}
+              <span>{appealSubmitting ? 'Submitting...' : 'Submit Appeal'}</span>
+            </button>
+          </div>
+        </form>
+      )}
+
       {/* Post Requirement Details */}
       <p className="text-xs text-slate-650 leading-relaxed font-semibold">
         {post.requirement}
@@ -312,14 +414,17 @@ export const RoommateCard: React.FC<RoommateCardProps> = ({ post, isLoading = fa
       {/* Explicit Tag list */}
       {post.tags && post.tags.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
-          {post.tags.filter(t => t !== 'Filled').map((tag, index) => (
-            <span 
-              key={index} 
-              className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full"
-            >
-              {tag}
-            </span>
-          ))}
+          {post.tags
+            .filter(t => !t.startsWith('Status:') && !t.startsWith('AppealText:') && !t.startsWith('ReportedAt:') && t !== 'Filled')
+            .map((tag, index) => (
+              <span 
+                key={index} 
+                className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full"
+              >
+                {tag}
+              </span>
+            ))
+          }
         </div>
       )}
 
@@ -343,9 +448,9 @@ export const RoommateCard: React.FC<RoommateCardProps> = ({ post, isLoading = fa
           {/* WhatsApp Direct Chat */}
           <button
             onClick={handleWhatsApp}
-            disabled={isFilled}
+            disabled={isFilled || isUnderReview || isAppeal || status === 'Expired'}
             className={`premium-btn-outline px-4 py-2 text-xs flex items-center space-x-1.5 ${
-              isFilled 
+              isFilled || isUnderReview || isAppeal || status === 'Expired'
                 ? 'opacity-40 border-slate-200 text-slate-450 cursor-not-allowed'
                 : 'cursor-pointer text-emerald-600 hover:text-white hover:bg-emerald-600 hover:border-emerald-600'
             }`}
@@ -355,12 +460,12 @@ export const RoommateCard: React.FC<RoommateCardProps> = ({ post, isLoading = fa
           </button>
 
           {/* Phone dialer trigger */}
-          {isFilled ? (
+          {isFilled || isUnderReview || isAppeal || status === 'Expired' ? (
             <button
               disabled
               className="bg-slate-100 border border-slate-200 text-slate-400 px-4.5 py-2 text-xs rounded-full font-bold cursor-not-allowed"
             >
-              Filled
+              {isFilled ? 'Filled' : isUnderReview ? 'Reviewing' : isAppeal ? 'Appealing' : 'Expired'}
             </button>
           ) : (
             <a

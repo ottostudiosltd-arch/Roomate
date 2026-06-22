@@ -52,12 +52,13 @@ export const PostRoommateModal: React.FC<PostRoommateModalProps> = ({ onClose, i
 
   const availableTags = ['Vegetarian', 'Non-Smoker', 'Study Focused', 'Night Owl', 'Early Riser'];
 
-  // Initialize Captcha
+  // Initialize Captcha (e.g. 44 + 55 - 1 style)
   const generateCaptcha = () => {
-    const num1 = Math.floor(Math.random() * 8) + 2; // 2-9
-    const num2 = Math.floor(Math.random() * 8) + 2; // 2-9
-    setCaptchaQuestion(`Solve: What is ${num1} + ${num2}?`);
-    setCaptchaAnswer(num1 + num2);
+    const num1 = Math.floor(Math.random() * 80) + 10; // Two digit (10-89)
+    const num2 = Math.floor(Math.random() * 80) + 10; // Two digit (10-89)
+    const num3 = Math.floor(Math.random() * 9) + 1;   // One digit (1-9)
+    setCaptchaQuestion(`Solve: ${num1} + ${num2} - ${num3}`);
+    setCaptchaAnswer(num1 + num2 - num3);
     setUserCaptcha('');
     setCaptchaVerified(false);
     setCaptchaError(false);
