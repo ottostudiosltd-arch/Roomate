@@ -13,4 +13,5 @@ export interface RoommatePost {
   googleMapsUrl?: string;
   isUpdate?: boolean;
   title?: string;
+  deviceId?: string;
 }

@@ -4,7 +4,7 @@ import { RoommateCard } from './components/RoommateCard';
 import { PostRoommateModal } from './components/PostRoommateModal';
 import { AdminPasswordModal } from './components/AdminPasswordModal';
 import { AdminPanel } from './pages/AdminPanel';
-import { Search, Plus, Shield, MapPin, SlidersHorizontal, AlertCircle, Loader2 } from 'lucide-react';
+import { Search, Plus, Shield, MapPin, SlidersHorizontal, AlertCircle } from 'lucide-react';
 
 function App() {
   const { posts, fetchPosts, dbError } = useRoommateStore();
@@ -19,6 +19,7 @@ function App() {
   const [selectedArea, setSelectedArea] = useState('');
   const [maxBudget, setMaxBudget] = useState(15000);
   const [sortBy, setSortBy] = useState<'newest' | 'oldest'>('newest');
+  const [showFilled, setShowFilled] = useState(false);
 
   // View & Modal states
   const [showPostModal, setShowPostModal] = useState(false);
@@ -30,6 +31,9 @@ function App() {
   // 0: finding room, 1: finding roommate, 2: welcome, 3: completed
   const [loadingStep, setLoadingStep] = useState<number>(0);
   const [isFetching, setIsFetching] = useState<boolean>(true);
+
+  // Check if device is banned locally
+  const isDeviceBanned = localStorage.getItem('roomate_device_banned') === 'true';
 
   // Cycle onboarding text sequentially
   useEffect(() => {
@@ -72,6 +76,13 @@ function App() {
   // Filtering & Sorting Logic
   const filteredAndSortedPosts = useMemo(() => {
     const filtered = posts.filter(post => {
+      // Admin updates are never filtered out by status or filters
+      if (post.isUpdate) return true;
+
+      // Filled listings filter
+      const isFilled = post.tags?.includes('Filled') || false;
+      if (isFilled && !showFilled) return false;
+
       // Place / Area filter
       if (selectedArea && post.area !== selectedArea) return false;
 
@@ -93,13 +104,24 @@ function App() {
       return true;
     });
 
-    // Sort listings
+    // Sort listings: System Admin announcements (isUpdate) always go to the top, then sort others by time
     return [...filtered].sort((a, b) => {
+      if (a.isUpdate && !b.isUpdate) return -1;
+      if (!a.isUpdate && b.isUpdate) return 1;
+
       const timeA = new Date(a.createdAt).getTime();
       const timeB = new Date(b.createdAt).getTime();
       return sortBy === 'newest' ? timeB - timeA : timeA - timeB;
     });
-  }, [posts, selectedArea, searchQuery, maxBudget, sortBy]);
+  }, [posts, selectedArea, searchQuery, maxBudget, sortBy, showFilled]);
+
+  const handleOpenPostModal = () => {
+    if (isDeviceBanned) {
+      alert('This device has been temporarily blocked from posting due to community guideline violations.');
+    } else {
+      setShowPostModal(true);
+    }
+  };
 
   // Render onboarding/loading sequences
   if (loadingStep < 3) {
@@ -167,7 +189,7 @@ function App() {
               </div>
             )}
             <button
-              onClick={() => setShowPostModal(true)}
+              onClick={handleOpenPostModal}
               className="premium-btn-black px-4.5 py-2 flex items-center space-x-1.5 cursor-pointer"
             >
               <Plus size={14} />
@@ -183,14 +205,14 @@ function App() {
         
         {isAdminMode ? (
           // Admin Panel View
-          <AdminPanel onExit={() => setIsAdminMode(false)} onAddPost={() => setShowPostModal(true)} />
+          <AdminPanel onExit={() => setIsAdminMode(false)} onAddPost={handleOpenPostModal} />
         ) : (
           // Public Board View
           <>
             {/* Hero Banner with SVG Line Vector */}
             <div className="border border-slate-200 rounded-3xl p-6 sm:p-8 flex flex-col md:flex-row justify-between items-center gap-6 bg-white shadow-sm">
               <div className="space-y-4 flex-1">
-                <span className="text-[9px] font-black uppercase tracking-wider border border-slate-200 px-2.5 py-1 bg-slate-55 rounded-full text-slate-500">
+                <span className="text-[9px] font-black uppercase tracking-wider border border-slate-200 px-2.5 py-1 bg-slate-50 rounded-full text-slate-500">
                   OPEN LISTING BOARD
                 </span>
                 <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight leading-none text-black">
@@ -202,7 +224,7 @@ function App() {
                 
                 {/* Embedded Add button inside Hero */}
                 <button
-                  onClick={() => setShowPostModal(true)}
+                  onClick={handleOpenPostModal}
                   className="premium-btn-black px-5 py-2.5 flex items-center space-x-1.5 cursor-pointer shadow-md shadow-black/5"
                 >
                   <Plus size={15} />
@@ -268,7 +290,7 @@ function App() {
             {/* Collapsible Filter settings panel */}
             {showFiltersPanel && (
               <div className="p-5 border border-slate-200 rounded-2xl bg-slate-50/50 space-y-4 animate-fade-in-up">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                   
                   {/* Budget Slider */}
                   <div>
@@ -298,13 +320,27 @@ function App() {
                           className={`px-3 py-1.5 border text-xs font-bold rounded-lg capitalize cursor-pointer transition-all ${
                             sortBy === mode 
                               ? 'border-black bg-black text-white' 
-                              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-350'
+                              : 'border-slate-200 bg-white text-slate-650 hover:border-slate-350'
                           }`}
                         >
                           {mode === 'newest' ? 'Most Recent' : 'Oldest'}
                         </button>
                       ))}
                     </div>
+                  </div>
+
+                  {/* Show Filled Toggle */}
+                  <div>
+                    <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider block mb-2">Listing Status</span>
+                    <label className="flex items-center space-x-2.5 py-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={showFilled}
+                        onChange={(e) => setShowFilled(e.target.checked)}
+                        className="accent-black rounded border-slate-300 w-4 h-4 cursor-pointer"
+                      />
+                      <span className="text-xs font-bold text-slate-700">Include Filled Listings</span>
+                    </label>
                   </div>
 
                 </div>
@@ -315,7 +351,7 @@ function App() {
             <div className="space-y-4 pt-4">
               
               {dbError && (
-                <div className="p-4 border border-red-250 bg-red-50 text-red-750 text-xs font-semibold rounded-2xl flex items-center space-x-2 animate-fade-in-up">
+                <div className="p-4 border border-red-200 bg-red-50 text-red-700 text-xs font-semibold rounded-2xl flex items-center space-x-2 animate-fade-in-up">
                   <AlertCircle size={15} className="shrink-0 text-red-650" />
                   <span><strong>Database error:</strong> {dbError}</span>
                 </div>

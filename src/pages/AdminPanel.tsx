@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useRoommateStore } from '../store/roommateStore';
 import { RoommateCard } from '../components/RoommateCard';
-import { Shield, ArrowLeft, Trash2, Plus } from 'lucide-react';
+import { Shield, ArrowLeft, Trash2, Plus, Ban } from 'lucide-react';
 
 interface AdminPanelProps {
   onExit: () => void;
@@ -9,7 +9,7 @@ interface AdminPanelProps {
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onExit, onAddPost }) => {
-  const { posts, deletePost, fetchPosts } = useRoommateStore();
+  const { posts, deletePost, fetchPosts, banContact } = useRoommateStore();
 
   // Refresh feed on mount
   useEffect(() => {
@@ -18,6 +18,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onExit, onAddPost }) => 
 
   const totalListings = posts.length;
   const reportedListings = posts.filter(p => p.reportsCount > 0);
+
+  const handleBanContact = (contact: string) => {
+    const confirmBan = window.confirm(`Are you sure you want to delete this listing and permanently ban phone number: ${contact} from posting again?`);
+    if (confirmBan) {
+      banContact(contact);
+      alert(`Phone number ${contact} has been globally blacklisted. All their posts have been deleted.`);
+    }
+  };
+
+  const handleDeletePost = (id: string) => {
+    const confirmDelete = window.confirm('Are you sure you want to delete this listing from the platform?');
+    if (confirmDelete) {
+      deletePost(id);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-fade-in-up">
@@ -53,8 +68,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onExit, onAddPost }) => 
           <span className="text-3xl font-black text-black mt-1 block">{totalListings}</span>
         </div>
         <div className="neo-card p-5">
-          <span className="text-[10px] font-black text-red-600 uppercase tracking-wider block">Reported scam postings</span>
-          <span className="text-3xl font-black text-red-600 mt-1 block">{reportedListings.length}</span>
+          <span className="text-[10px] font-black text-red-650 uppercase tracking-wider block">Reported scam postings</span>
+          <span className="text-3xl font-black text-red-650 mt-1 block">{reportedListings.length}</span>
         </div>
       </div>
 
@@ -63,7 +78,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onExit, onAddPost }) => 
         <h3 className="font-extrabold text-sm uppercase tracking-wide">Active Listings Moderation</h3>
         
         {posts.length === 0 ? (
-          <div className="p-8 border-2 border-black text-center text-xs font-bold text-slate-400">
+          <div className="p-8 border border-slate-200 text-center text-xs font-bold text-slate-400">
             No active postings in the database.
           </div>
         ) : (
@@ -72,14 +87,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onExit, onAddPost }) => 
               <div key={post.id} className="relative group">
                 <RoommateCard post={post} isAdmin={true} />
                 
-                {/* Admin Delete Action Button overlay */}
-                <button
-                  onClick={() => deletePost(post.id)}
-                  className="absolute top-5 right-12 p-1.5 bg-red-600 text-white border border-black hover:bg-red-700 transition-colors shadow-[1px_1px_0px_#000000] cursor-pointer"
-                  title="Remove Fake Listing"
-                >
-                  <Trash2 size={13} />
-                </button>
+                {/* Admin Controls Overlay */}
+                <div className="absolute top-5 right-12 flex items-center space-x-1.5">
+                  {/* Delete & Ban Contact Action (only for non-admin announcements) */}
+                  {!post.isUpdate && post.contact && (
+                    <button
+                      onClick={() => handleBanContact(post.contact)}
+                      className="p-1.5 bg-black text-red-500 border border-slate-800 hover:bg-slate-900 transition-colors shadow-xs cursor-pointer rounded-lg"
+                      title={`Ban contact: ${post.contact}`}
+                    >
+                      <Ban size={13} />
+                    </button>
+                  )}
+
+                  {/* Standard Admin Delete Action Button */}
+                  <button
+                    onClick={() => handleDeletePost(post.id)}
+                    className="p-1.5 bg-red-650 text-white hover:bg-red-700 transition-colors shadow-xs cursor-pointer rounded-lg"
+                    title="Remove Listing"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+
               </div>
             ))}
           </div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { RoommatePost } from '../types';
 import { useRoommateStore } from '../store/roommateStore';
-import { MoreVertical, Phone, MessageSquare, AlertTriangle, ShieldCheck, Check, MapPin, Trash2 } from 'lucide-react';
+import { MoreVertical, Phone, MessageSquare, AlertTriangle, ShieldCheck, Check, MapPin, Trash2, CheckCircle2 } from 'lucide-react';
 
 interface RoommateCardProps {
   post?: RoommatePost;
@@ -10,7 +10,7 @@ interface RoommateCardProps {
 }
 
 export const RoommateCard: React.FC<RoommateCardProps> = ({ post, isLoading = false, isAdmin = false }) => {
-  const { reportPost, deletePost } = useRoommateStore();
+  const { reportPost, deletePost, markAsFilled } = useRoommateStore();
   
   // States
   const [showDropdown, setShowDropdown] = useState(false);
@@ -51,17 +51,23 @@ export const RoommateCard: React.FC<RoommateCardProps> = ({ post, isLoading = fa
     setShowDeleteConfirm(false);
   };
 
+  const handleMarkAsFilled = () => {
+    if (!post) return;
+    markAsFilled(post.id);
+    setShowDropdown(false);
+  };
+
   // WhatsApp chat redirect
   const handleWhatsApp = () => {
     if (!post) return;
     const cleaned = post.contact.replace(/\D/g, '');
     const waNumber = cleaned.startsWith('91') ? cleaned : `91${cleaned}`;
-    const waUrl = `https://wa.me/${waNumber}?text=Hey%20${encodeURIComponent(post.name)},%20I%20saw%20your%20listing%20on%20Roomate%20and%20wanted%20to%20connect!`;
+    const waUrl = `https://wa.me/${waNumber}?text=Hey%20${encodeURIComponent(post.name)},%20I%20saw%20your%2520listing%20on%20Roomate%20and%20wanted%20to%252520connect!`;
     window.open(waUrl, '_blank');
   };
 
   if (isLoading || !post) {
-    // Pulse Skeleton Card (Matching new avatar-free layout)
+    // Pulse Skeleton Card
     return (
       <div className="premium-card p-5 space-y-4 bg-white animate-pulse">
         <div className="flex justify-between items-center">
@@ -89,6 +95,8 @@ export const RoommateCard: React.FC<RoommateCardProps> = ({ post, isLoading = fa
       </div>
     );
   }
+
+  const isFilled = post.tags?.includes('Filled') || false;
 
   // Check if it is a platform update announcement
   if (post.isUpdate) {
@@ -180,10 +188,17 @@ export const RoommateCard: React.FC<RoommateCardProps> = ({ post, isLoading = fa
     );
   }
 
+  // Exact location link resolution (Checks if poster saved coordinates, else queries area)
+  const exactMapsUrl = post.googleMapsUrl && post.googleMapsUrl.trim() !== ''
+    ? post.googleMapsUrl
+    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(post.area + ', Pune')}`;
+
   return (
-    <div className="premium-card p-5 relative flex flex-col justify-between gap-4 bg-white text-slate-800 animate-fade-in-up min-h-[170px] overflow-hidden">
+    <div className={`premium-card p-5 relative flex flex-col justify-between gap-4 bg-white text-slate-800 animate-fade-in-up min-h-[170px] overflow-hidden ${
+      isFilled ? 'border-dashed border-slate-350 opacity-80 bg-slate-50/40' : ''
+    }`}>
       
-      {/* Delete Confirmation Overlay (Built-in for premium layout feel) */}
+      {/* Delete Confirmation Overlay */}
       {showDeleteConfirm && (
         <div className="absolute inset-0 z-30 bg-white/95 border border-slate-200 rounded-2xl p-5 flex flex-col justify-between items-center text-center animate-fade-in-up">
           <div className="my-auto space-y-1.5">
@@ -209,14 +224,19 @@ export const RoommateCard: React.FC<RoommateCardProps> = ({ post, isLoading = fa
         </div>
       )}
 
-      {/* Header Info (No avatars/profile images, clean text layout) */}
+      {/* Header Info */}
       <div className="flex justify-between items-start">
         <div>
-          <div className="flex items-center space-x-1.5">
+          <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
             <span className="font-black text-slate-900 text-base leading-none">{post.name}</span>
             <span title="Verified student profile">
               <ShieldCheck size={14} className="text-blue-600 fill-blue-500/10 shrink-0" />
             </span>
+            {isFilled && (
+              <span className="bg-slate-100 text-slate-500 border border-slate-250 text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md flex items-center gap-0.5 leading-none">
+                <Check size={9} strokeWidth={3} /> Filled
+              </span>
+            )}
           </div>
           <div className="flex items-center space-x-1 text-[10px] text-slate-500 font-bold uppercase mt-1.5 tracking-wider">
             <MapPin size={11} className="text-slate-400 shrink-0" />
@@ -228,13 +248,13 @@ export const RoommateCard: React.FC<RoommateCardProps> = ({ post, isLoading = fa
         <div className="flex items-center space-x-1 shrink-0">
           {/* Google Maps Pin */}
           <a
-            href={post.googleMapsUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(post.area + ', Pune')}`}
+            href={exactMapsUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="p-1 rounded-full text-red-500 hover:bg-slate-50 transition-colors cursor-pointer"
-            title="View room location on Google Maps"
+            title={post.googleMapsUrl ? "View exact room coordinates on Google Maps" : "View area location on Google Maps"}
           >
-            <MapPin size={16} className="fill-red-500/10" />
+            <MapPin size={16} className={post.googleMapsUrl ? "fill-red-500" : "fill-red-500/10"} />
           </a>
 
           <div className="relative">
@@ -253,9 +273,20 @@ export const RoommateCard: React.FC<RoommateCardProps> = ({ post, isLoading = fa
                   onClick={handleReport}
                   className="w-full text-left px-3 py-2 text-xs font-bold text-slate-600 hover:bg-red-50 hover:text-red-650 flex items-center space-x-1.5 cursor-pointer"
                 >
-                  <AlertTriangle size={13} className="text-slate-400 group-hover:text-red-650" />
+                  <AlertTriangle size={13} className="text-slate-400" />
                   <span>Report Scam ({post.reportsCount}/5)</span>
                 </button>
+
+                {/* Mark as Filled option for owner */}
+                {isMyPost && !isFilled && (
+                  <button
+                    onClick={handleMarkAsFilled}
+                    className="w-full text-left px-3 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-50 flex items-center space-x-1.5 cursor-pointer border-t border-slate-100 mt-1 pt-1.5"
+                  >
+                    <CheckCircle2 size={13} className="text-emerald-500" />
+                    <span>Mark as Filled</span>
+                  </button>
+                )}
 
                 {/* Owner/Admin Delete Button */}
                 {(isMyPost || isAdmin) && (
@@ -273,7 +304,7 @@ export const RoommateCard: React.FC<RoommateCardProps> = ({ post, isLoading = fa
         </div>
       </div>
 
-      {/* Post Requirement Details (No images in card body) */}
+      {/* Post Requirement Details */}
       <p className="text-xs text-slate-650 leading-relaxed font-semibold">
         {post.requirement}
       </p>
@@ -281,7 +312,7 @@ export const RoommateCard: React.FC<RoommateCardProps> = ({ post, isLoading = fa
       {/* Explicit Tag list */}
       {post.tags && post.tags.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
-          {post.tags.map((tag, index) => (
+          {post.tags.filter(t => t !== 'Filled').map((tag, index) => (
             <span 
               key={index} 
               className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full"
@@ -312,20 +343,34 @@ export const RoommateCard: React.FC<RoommateCardProps> = ({ post, isLoading = fa
           {/* WhatsApp Direct Chat */}
           <button
             onClick={handleWhatsApp}
-            className="premium-btn-outline px-4 py-2 text-xs cursor-pointer flex items-center space-x-1.5 text-emerald-600 hover:text-white hover:bg-emerald-600 hover:border-emerald-600"
+            disabled={isFilled}
+            className={`premium-btn-outline px-4 py-2 text-xs flex items-center space-x-1.5 ${
+              isFilled 
+                ? 'opacity-40 border-slate-200 text-slate-450 cursor-not-allowed'
+                : 'cursor-pointer text-emerald-600 hover:text-white hover:bg-emerald-600 hover:border-emerald-600'
+            }`}
           >
             <MessageSquare size={12} className="shrink-0" />
-            <span>WhatsApp Message</span>
+            <span>Message</span>
           </button>
 
           {/* Phone dialer trigger */}
-          <a
-            href={`tel:${post.contact}`}
-            className="premium-btn-black px-4.5 py-2 text-xs cursor-pointer flex items-center space-x-1.5"
-          >
-            <Phone size={12} className="shrink-0" />
-            <span>Call</span>
-          </a>
+          {isFilled ? (
+            <button
+              disabled
+              className="bg-slate-100 border border-slate-200 text-slate-400 px-4.5 py-2 text-xs rounded-full font-bold cursor-not-allowed"
+            >
+              Filled
+            </button>
+          ) : (
+            <a
+              href={`tel:${post.contact}`}
+              className="premium-btn-black px-4.5 py-2 text-xs cursor-pointer flex items-center space-x-1.5"
+            >
+              <Phone size={12} className="shrink-0" />
+              <span>Call</span>
+            </a>
+          )}
 
         </div>
 
