@@ -7,7 +7,7 @@ import { AdminPanel } from './pages/AdminPanel';
 import { Search, Plus, Shield, MapPin, SlidersHorizontal, AlertCircle, Loader2 } from 'lucide-react';
 
 function App() {
-  const { posts, fetchPosts } = useRoommateStore();
+  const { posts, fetchPosts, dbError } = useRoommateStore();
 
   // Fetch posts from Supabase on mount
   useEffect(() => {
@@ -314,6 +314,13 @@ function App() {
             {/* Listings Grid */}
             <div className="space-y-4 pt-4">
               
+              {dbError && (
+                <div className="p-4 border border-red-250 bg-red-50 text-red-750 text-xs font-semibold rounded-2xl flex items-center space-x-2 animate-fade-in-up">
+                  <AlertCircle size={15} className="shrink-0 text-red-650" />
+                  <span><strong>Database error:</strong> {dbError}</span>
+                </div>
+              )}
+
               {/* Grid Header Info */}
               <div className="flex justify-between items-center">
                 <h2 className="font-extrabold text-sm uppercase tracking-wide text-black">
@@ -335,10 +342,15 @@ function App() {
                 </div>
               ) : filteredAndSortedPosts.length === 0 ? (
                 // Empty Board
-                <div className="border border-slate-200 rounded-2xl py-16 text-center max-w-md mx-auto space-y-2 bg-white">
+                <div className="border border-slate-200 rounded-2xl py-16 text-center max-w-md mx-auto space-y-2.5 bg-white">
                   <AlertCircle size={28} className="mx-auto text-slate-300" />
                   <p className="text-xs font-bold text-slate-500">No roommate postings found</p>
                   <p className="text-[10px] text-slate-400">Try widening your search queries or resetting place filters.</p>
+                  
+                  {/* Troubleshooting Tip */}
+                  <div className="pt-2 border-t border-slate-100 max-w-[280px] mx-auto text-[9px] text-slate-400 font-medium leading-relaxed">
+                    💡 <strong>Tip:</strong> If you see listings in your Supabase dashboard but they aren't showing here, check that your RLS <strong>SELECT</strong> policy is enabled for public/anon access in your Supabase project.
+                  </div>
                 </div>
               ) : (
                 // Active Listings

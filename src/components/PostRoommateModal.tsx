@@ -27,6 +27,7 @@ export const PostRoommateModal: React.FC<PostRoommateModalProps> = ({ onClose, i
   const [updateTitle, setUpdateTitle] = useState('');
 
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const availableTags = ['Vegetarian', 'Non-Smoker', 'Study Focused', 'Night Owl', 'Early Riser'];
 
@@ -63,6 +64,7 @@ export const PostRoommateModal: React.FC<PostRoommateModalProps> = ({ onClose, i
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setIsSubmitting(true);
 
     try {
       if (postType === 'update') {
@@ -138,6 +140,7 @@ export const PostRoommateModal: React.FC<PostRoommateModalProps> = ({ onClose, i
     } catch (err: any) {
       console.error(err);
       setError(err?.message || 'Could not publish listing. Please check your network connection.');
+      setIsSubmitting(false);
     }
   };
 
@@ -371,15 +374,22 @@ export const PostRoommateModal: React.FC<PostRoommateModalProps> = ({ onClose, i
             <button
               type="button"
               onClick={onClose}
-              className="premium-btn-outline px-4.5 py-2 cursor-pointer"
+              disabled={isSubmitting}
+              className="premium-btn-outline px-4.5 py-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="premium-btn-black px-5 py-2 cursor-pointer"
+              disabled={isSubmitting}
+              className="premium-btn-black px-5 py-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1.5"
             >
-              {postType === 'update' ? 'Publish Announcement' : 'Post Listing'}
+              {isSubmitting && <Loader2 size={13} className="animate-spin text-slate-350" />}
+              <span>
+                {isSubmitting 
+                  ? 'Posting...' 
+                  : (postType === 'update' ? 'Publish Announcement' : 'Post Listing')}
+              </span>
             </button>
           </div>
 

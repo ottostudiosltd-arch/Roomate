@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient';
 
 interface RoommateState {
   posts: RoommatePost[];
+  dbError: string | null;
   fetchPosts: () => Promise<void>;
   addPost: (
     name: string,
@@ -21,16 +22,21 @@ interface RoommateState {
 
 export const useRoommateStore = create<RoommateState>((set) => ({
   posts: [],
+  dbError: null,
 
   fetchPosts: async () => {
     try {
+      set({ dbError: null });
       const { data, error } = await supabase
         .from('posts')
         .select('*')
         .order('created_at', { ascending: false });
 
+      console.log('Raw database select results from Supabase:', data);
+
       if (error) {
         console.error('Error fetching posts from Supabase:', error);
+        set({ dbError: error.message });
         return;
       }
 
@@ -48,9 +54,10 @@ export const useRoommateStore = create<RoommateState>((set) => ({
         title: dbPost.title,
       }));
 
-      set({ posts: mappedPosts });
-    } catch (err) {
+      set({ posts: mappedPosts, dbError: null });
+    } catch (err: any) {
       console.error('Failed to fetch posts:', err);
+      set({ dbError: err?.message || 'Failed to connect to database' });
     }
   },
 
@@ -95,6 +102,7 @@ export const useRoommateStore = create<RoommateState>((set) => ({
 
       set((state) => ({
         posts: [newPost, ...state.posts],
+        dbError: null
       }));
 
       return newPost.id;
