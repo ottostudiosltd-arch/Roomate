@@ -324,9 +324,10 @@ function App() {
   }
 
   return (
-    <div className={`min-h-screen bg-white text-slate-900 font-sans transition-all duration-200 ${
-      showVerificationPopup ? 'blur-md select-none pointer-events-none' : ''
-    }`}>
+    <div className="min-h-screen bg-white text-slate-900 font-sans transition-all duration-200">
+      
+      {/* Main page content blurred while popup is open */}
+      <div className={showVerificationPopup ? 'blur-md select-none pointer-events-none' : ''}>
       
       {/* Ticker Animation Styling */}
       <style>{`
@@ -613,11 +614,12 @@ function App() {
             <span className="hidden sm:inline text-slate-300">•</span>
             <button onClick={() => setCurrentView('privacy')} className="hover:text-black cursor-pointer uppercase transition-colors">Privacy Policy</button>
           </div>
-          <div className="border-t border-slate-200 pt-4 text-slate-400 font-medium">
+              <div className="border-t border-slate-200 pt-4 text-slate-400 font-medium">
             <span>© 2026 Roommate India • Created by OTTO Labs</span>
           </div>
         </div>
       </footer>
+      </div>
 
       {/* Modals */}
       {showPostModal && (
