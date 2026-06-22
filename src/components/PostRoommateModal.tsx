@@ -102,6 +102,17 @@ export const PostRoommateModal: React.FC<PostRoommateModalProps> = ({ onClose, i
     setShowRobotCheckbox(true);
   };
 
+  const handleCaptchaChange = (val: string) => {
+    setUserCaptcha(val);
+    const parsed = parseInt(val.trim());
+    if (!isNaN(parsed) && parsed === captchaAnswer) {
+      setCaptchaVerified(true);
+      setCaptchaError(false);
+    } else {
+      setCaptchaVerified(false);
+    }
+  };
+
   const handleVerifyCaptcha = () => {
     const val = parseInt(userCaptcha.trim());
     if (!isNaN(val) && val === captchaAnswer) {
@@ -169,8 +180,15 @@ export const PostRoommateModal: React.FC<PostRoommateModalProps> = ({ onClose, i
 
     // Captcha Validation
     if (!captchaVerified) {
-      setError('Please complete the Captcha human-verification check.');
-      return;
+      const val = parseInt(userCaptcha.trim());
+      if (!isNaN(val) && val === captchaAnswer) {
+        setCaptchaVerified(true);
+        setCaptchaError(false);
+      } else {
+        setError('Please enter the correct Captcha answer to verify you are human.');
+        setCaptchaError(true);
+        return;
+      }
     }
 
     // Guidelines Check
@@ -629,7 +647,7 @@ export const PostRoommateModal: React.FC<PostRoommateModalProps> = ({ onClose, i
                     type="text"
                     placeholder="Your Answer"
                     value={userCaptcha}
-                    onChange={(e) => setUserCaptcha(e.target.value)}
+                    onChange={(e) => handleCaptchaChange(e.target.value)}
                     disabled={captchaVerified}
                     className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-slate-400 bg-white"
                   />
@@ -668,7 +686,7 @@ export const PostRoommateModal: React.FC<PostRoommateModalProps> = ({ onClose, i
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || !captchaVerified}
+              disabled={isSubmitting}
               className="premium-btn-black px-5 py-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1.5"
             >
               {isSubmitting && <Loader2 size={13} className="animate-spin text-slate-350" />}
