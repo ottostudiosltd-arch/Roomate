@@ -154,7 +154,7 @@ function App() {
 
   // Verification popup check
   useEffect(() => {
-    const isVerified = sessionStorage.getItem('roomate_verified') === 'true';
+    const isVerified = localStorage.getItem('roomate_verified') === 'true';
     if (!isVerified) {
       // Generate puzzle (e.g. 44 + 55 - 1 style)
       const num1 = Math.floor(Math.random() * 80) + 10; // Two digit (10-89)
@@ -170,7 +170,7 @@ function App() {
     e.preventDefault();
     const val = parseInt(userPopupAnswer.trim());
     if (!isNaN(val) && val === popupAnswer) {
-      sessionStorage.setItem('roomate_verified', 'true');
+      localStorage.setItem('roomate_verified', 'true');
       setShowVerificationPopup(false);
       setPopupError(false);
     } else {
@@ -218,6 +218,13 @@ function App() {
     });
     return Array.from(areas);
   }, [posts]);
+
+  // Check if global maintenance mode is toggled on in the DB
+  const isMaintenanceActive = useMemo(() => {
+    return posts.some(p => p.isUpdate && p.title === 'MAINTENANCE_ACTIVE');
+  }, [posts]);
+
+
 
   // Filtering & Sorting Logic
   const filteredAndSortedPosts = useMemo(() => {
@@ -323,6 +330,44 @@ function App() {
     );
   }
 
+  if (isMaintenanceActive && !isAdminMode) {
+    return (
+      <div className="min-h-screen flex flex-col justify-center items-center bg-white text-slate-800 p-6 select-none font-sans">
+        <div className="w-full max-w-sm border border-slate-200 shadow-xl rounded-3xl p-8 bg-white text-center space-y-6 animate-fade-in-up">
+          <div className="text-4xl">⛑️</div>
+          <h1 className="text-xl font-black uppercase tracking-wide text-slate-900">Maintenance Break</h1>
+          <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+            Roommate India is currently undergoing scheduled system updates to install new features and security patches. We will be back online shortly. Thank you for your patience! 🛡️
+          </p>
+
+          {/* Admin Backdoor login on Maintenance Screen */}
+          <div className="pt-4 border-t border-slate-100 space-y-3">
+            <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">System Status Check</label>
+            <input
+              type="password"
+              placeholder="Enter System Code..."
+              onChange={(e) => {
+                if (e.target.value.trim() === '661983') {
+                  setShowPasswordModal(true);
+                  e.target.value = '';
+                }
+              }}
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-center text-black focus:outline-none focus:border-slate-400 bg-white"
+            />
+          </div>
+        </div>
+
+        {/* Admin password modal render on Maintenance View */}
+        {showPasswordModal && (
+          <AdminPasswordModal
+            onClose={() => setShowPasswordModal(false)}
+            onSuccess={() => setIsAdminMode(true)}
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-white text-slate-900 font-sans transition-all duration-200">
       
@@ -364,31 +409,25 @@ function App() {
           {/* Logo brand */}
           <div 
             onClick={() => { setIsAdminMode(false); setSelectedArea(''); setSearchQuery(''); setCurrentView('board'); }}
-            className="flex items-center space-x-2.5 cursor-pointer"
+            className="flex items-center space-x-2 cursor-pointer"
           >
-            <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center">
-              <span className="font-extrabold text-white text-base tracking-wider">R</span>
-            </div>
-            <div>
-              <span className="font-black text-lg text-black tracking-tight">Roomate</span>
-              <span className="text-[9px] block font-black uppercase text-slate-400 tracking-tighter leading-none mt-0.5">PUNE CAMPUS BOARD</span>
-            </div>
+            <img src="/logo.png" alt="Roomate Logo" className="h-7 sm:h-9 w-auto object-contain" />
           </div>
 
           {/* Actions: Admin Status and Header Add Post */}
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2 sm:space-x-3">
             {isAdminMode && (
-              <div className="flex items-center space-x-1.5 px-3 py-1 border border-black bg-black text-white text-[9px] font-black uppercase tracking-wider rounded-md">
+              <div className="flex items-center space-x-1 px-2 sm:px-3 py-1 border border-black bg-black text-white text-[9px] font-black uppercase tracking-wider rounded-md">
                 <Shield size={11} />
-                <span>Admin Console</span>
+                <span>Admin<span className="hidden sm:inline"> Console</span></span>
               </div>
             )}
             <button
               onClick={handleOpenPostModal}
-              className="premium-btn-black px-4.5 py-2 flex items-center space-x-1.5 cursor-pointer"
+              className="premium-btn-black px-3 sm:px-4.5 py-1.5 sm:py-2 flex items-center space-x-1.5 cursor-pointer text-xs sm:text-sm"
             >
               <Plus size={14} />
-              <span>Post Listing</span>
+              <span>Post<span className="hidden sm:inline"> Listing</span></span>
             </button>
           </div>
 
@@ -601,6 +640,8 @@ function App() {
               )}
 
             </div>
+
+
           </>
         )}
 

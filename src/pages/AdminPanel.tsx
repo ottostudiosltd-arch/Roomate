@@ -10,8 +10,38 @@ interface AdminPanelProps {
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onExit, onAddPost }) => {
-  const { posts, deletePost, fetchPosts, banContact, verifyPost } = useRoommateStore();
+  const { posts, deletePost, fetchPosts, banContact, verifyPost, addPost } = useRoommateStore();
   const [activeTab, setActiveTab] = useState<'listings' | 'reported' | 'appeals' | 'expired'>('reported');
+
+  const isMaintenanceOn = posts.some(p => p.isUpdate && p.title === 'MAINTENANCE_ACTIVE');
+
+  const handleToggleMaintenance = async () => {
+    if (isMaintenanceOn) {
+      const confirmOff = window.confirm('Are you sure you want to end the maintenance break and restore public website access?');
+      if (confirmOff) {
+        const maintenancePosts = posts.filter(p => p.isUpdate && p.title === 'MAINTENANCE_ACTIVE');
+        for (const mp of maintenancePosts) {
+          await deletePost(mp.id);
+        }
+        alert('Maintenance break ended. Website is now fully live.');
+      }
+    } else {
+      const confirmOn = window.confirm('Are you sure you want to start a maintenance break? This will block public access and show a maintenance page to all users globally.');
+      if (confirmOn) {
+        await addPost(
+          'System Admin',
+          '',
+          'We are currently installing system upgrades and performance improvements. We will be back online shortly! ⛑',
+          '',
+          [],
+          '',
+          true,
+          'MAINTENANCE_ACTIVE'
+        );
+        alert('Maintenance break started successfully. Website is now offline for public users.');
+      }
+    }
+  };
 
   // Refresh feed on mount
   useEffect(() => {
@@ -60,25 +90,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onExit, onAddPost }) => 
     <div className="space-y-6 animate-fade-in-up">
       
       {/* Admin Panel Header */}
-      <div className="flex justify-between items-center pb-4 border-b-2 border-black">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b-2 border-black">
         <div className="flex items-center space-x-2">
           <Shield size={22} className="text-black" />
           <h2 className="text-xl font-black uppercase tracking-wide">Administration Console</h2>
         </div>
-        <div className="flex items-center space-x-2.5">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <button
+            onClick={handleToggleMaintenance}
+            className={`px-3 sm:px-4 py-1.5 sm:py-2 text-xs flex items-center space-x-1.5 cursor-pointer rounded-xl font-bold transition-all ${
+              isMaintenanceOn 
+                ? 'bg-red-600 hover:bg-red-700 text-white animate-pulse' 
+                : 'border border-slate-200 bg-white text-slate-800 hover:border-slate-400'
+            }`}
+          >
+            <span>{isMaintenanceOn ? 'End Maintenance' : 'Start Maintenance'} ⛑</span>
+          </button>
           <button
             onClick={onAddPost}
-            className="premium-btn-black px-4.5 py-2 text-xs flex items-center space-x-1.5 cursor-pointer"
+            className="premium-btn-black px-3.5 sm:px-4.5 py-1.5 sm:py-2 text-xs flex items-center space-x-1.5 cursor-pointer"
           >
             <Plus size={14} />
             <span>Add Post</span>
           </button>
           <button
             onClick={onExit}
-            className="neo-btn px-4 py-2 text-xs flex items-center space-x-1.5 cursor-pointer bg-white"
+            className="neo-btn px-3 sm:px-4 py-1.5 sm:py-2 text-xs flex items-center space-x-1.5 cursor-pointer bg-white"
           >
             <ArrowLeft size={14} />
-            <span>Exit Admin Feed</span>
+            <span>Exit <span className="hidden sm:inline">Admin Feed</span><span className="inline sm:hidden">Feed</span></span>
           </button>
         </div>
       </div>
@@ -104,10 +144,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onExit, onAddPost }) => 
       </div>
 
       {/* Navigation Tabs */}
-      <div className="border border-slate-200 rounded-xl p-1.5 flex gap-1.5 bg-slate-50 text-[11px] font-black uppercase tracking-wider">
+      <div className="border border-slate-200 rounded-xl p-1.5 flex gap-1.5 bg-slate-55 text-[10px] sm:text-[11px] font-black uppercase tracking-wider overflow-x-auto whitespace-nowrap scrollbar-thin">
         <button
           onClick={() => setActiveTab('reported')}
-          className={`flex-1 py-2 text-center rounded-lg transition-all cursor-pointer ${
+          className={`flex-1 min-w-[110px] sm:min-w-0 py-2 text-center rounded-lg transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'reported' ? 'bg-black text-white' : 'text-slate-500 hover:text-slate-800'
           }`}
         >
@@ -115,7 +155,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onExit, onAddPost }) => 
         </button>
         <button
           onClick={() => setActiveTab('appeals')}
-          className={`flex-1 py-2 text-center rounded-lg transition-all cursor-pointer ${
+          className={`flex-1 min-w-[110px] sm:min-w-0 py-2 text-center rounded-lg transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'appeals' ? 'bg-black text-white' : 'text-slate-500 hover:text-slate-800'
           }`}
         >
@@ -123,7 +163,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onExit, onAddPost }) => 
         </button>
         <button
           onClick={() => setActiveTab('expired')}
-          className={`flex-1 py-2 text-center rounded-lg transition-all cursor-pointer ${
+          className={`flex-1 min-w-[110px] sm:min-w-0 py-2 text-center rounded-lg transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'expired' ? 'bg-black text-white' : 'text-slate-500 hover:text-slate-800'
           }`}
         >
@@ -131,11 +171,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onExit, onAddPost }) => 
         </button>
         <button
           onClick={() => setActiveTab('listings')}
-          className={`flex-1 py-2 text-center rounded-lg transition-all cursor-pointer ${
+          className={`flex-1 min-w-[110px] sm:min-w-0 py-2 text-center rounded-lg transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'listings' ? 'bg-black text-white' : 'text-slate-500 hover:text-slate-800'
           }`}
         >
-          📁 All Listings ({totalListings})
+          📁 All<span className="hidden sm:inline"> Listings</span> ({totalListings})
         </button>
       </div>
 
